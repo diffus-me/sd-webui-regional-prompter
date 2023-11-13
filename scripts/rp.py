@@ -224,7 +224,7 @@ class Script(modules.scripts.Script):
 
         presets = list()
 
-        with gr.Accordion("Regional Prompter", open=False, elem_id="RP_main"):
+        with gr.Accordion("Image Composition (Regional Prompter)", open=False, elem_id="RP_main"):
             with gr.Row():
                 active = gr.Checkbox(value=False, label="Active",interactive=True,elem_id="RP_active")
                 urlguide = gr.HTML(value = fhurl(GUIDEURL, "Usage guide"))

@@ -24,6 +24,9 @@ class Script(scripts.Script):
     def title(self):
         return "Differential Regional Prompter"
 
+    def show(self, is_img2img):
+        return False
+
     def ui(self, is_img2img):
         with gr.Row():
             pass

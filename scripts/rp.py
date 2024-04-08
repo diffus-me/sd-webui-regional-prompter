@@ -261,7 +261,7 @@ class Script(modules.scripts.Script):
 
         eladd = "i2i" if is_img2img else "t2i"
 
-        with gr.Accordion("Regional Prompter", open=False, elem_id="RP_main" + eladd):
+        with gr.Accordion("Image Composition (Regional Prompter)", open=False, elem_id="RP_main" + eladd):
             with gr.Row():
                 active = gr.Checkbox(value=False, label="Active",interactive=True,elem_id="RP_active" + eladd)
                 urlguide = gr.HTML(value = fhurl(GUIDEURL, "Usage guide"))

@@ -69,7 +69,7 @@ PROMPTURL2 = GUIDEURL + r"/blob/main/prompt_ja.md"
 
 def ui_tab(mode, submode, eladd):
     """Structures components for mode tab.
-    
+
     Semi harcoded but it's clearer this way.
     """
     vret = None
@@ -100,16 +100,16 @@ def ui_tab(mode, submode, eladd):
         with gr.Row(): # Creep: Placeholder, should probably make this invisible.
             xmode = gr.Radio(label="Mask mode", choices=submode, value="Mask", type="value", interactive=True,elem_id="RP_mask_mode" + eladd)
         with gr.Row(): # CREEP: Css magic to make the canvas bigger? I think it's in style.css: #img2maskimg -> height.
-            polymask = gr.Image(label = "Do not upload here until bugfix",elem_id="polymask" + eladd,
+            polymask = gr.Image(label = "Do not upload here until bugfix",elem_id="polymask" + eladd, interactive=False,
                                 source = "upload", mirror_webcam = False, type = "numpy", tool = "sketch")#.style(height=480)
         with gr.Row():
             with gr.Column():
                 num = gr.Slider(label="Region", minimum=-1, maximum=MAXCOLREG, step=1, value=1,elem_id="RP_mask_region" + eladd)
                 canvas_width = gr.Slider(label="Inpaint+ Width", minimum=64, maximum=2048, value=512, step=8,elem_id="RP_mask_width" + eladd)
                 canvas_height = gr.Slider(label="Inpaint+ Height", minimum=64, maximum=2048, value=512, step=8,elem_id="RP_mask_height" + eladd)
-                btn = gr.Button(value = "Draw region + show mask")
+                cbtn = gr.Button(value="Step 1: Create mask area")
+                btn = gr.Button(value="Step 2: Draw region + show mask")
                 # btn2 = gr.Button(value = "Display mask") # Not needed.
-                cbtn = gr.Button(value="Create mask area")
             with gr.Column():
                 showmask = gr.Image(label = "Mask", shape=(IDIM, IDIM))
                 # CONT: Awaiting fix for https://github.com/gradio-app/gradio/issues/4088.
@@ -117,7 +117,10 @@ def ui_tab(mode, submode, eladd):
         # btn.click(detect_polygons, inputs = [polymask,num], outputs = [polymask,num])
         btn.click(draw_region, inputs = [polymask, num], outputs = [polymask, num, showmask])
         # btn2.click(detect_mask, inputs = [polymask,num], outputs = [showmask])
-        cbtn.click(fn=create_canvas, inputs=[canvas_height, canvas_width], outputs=[polymask])
+        #cbtn.click(fn=create_canvas, inputs=[canvas_height, canvas_width], outputs=[polymask])
+        def create_canvas_wrapper(height, width):
+            return gr.update(value=create_canvas(height, width), interactive=True)
+        cbtn.click(fn=create_canvas_wrapper, inputs=[canvas_height, canvas_width], outputs=[polymask])
         uploadmask.upload(fn = draw_image, inputs = [uploadmask], outputs = [polymask, uploadmask, showmask])
         
         vret = [xmode, polymask, num, canvas_width, canvas_height, btn, cbtn, showmask, uploadmask]
@@ -153,20 +156,20 @@ def mode2tabs(mode):
             vret[0] = k
             vret[i + 1] = mode
     return vret
-    
+
 def tabs2mode(tab, *submode):
     """Converts ui tab + submode list to a single value mode.
-    
+
     Picks current submode based on tab, nothing clever. Submodes must be unique.
     """
     for (i,(k,_)) in enumerate(RPMODES):
         if tab == k:
             return submode[i]
     return "Nope"
-    
+
 def expand_components(l):
     """Converts json preset to component format.
-    
+
     Assumes mode is the first value in list.
     """
     l = list(l) # Tuples cannot be altered.
@@ -175,13 +178,13 @@ def expand_components(l):
 
 def compress_components(l):
     """Converts component values to preset format.
-    
+
     Assumes tab + submodes are the first values in list.
     """
     l = list(l)
     mode = tabs2mode(*l[:len(RPMODES) + 1])
     return [mode] + l[len(RPMODES) + 1:]
-    
+
 class Script(modules.scripts.Script):
     def __init__(self,active = False,mode = "Matrix",calc = "Attention",h = 0, w =0, debug = False, debug2 = False, usebase = False, 
     usecom = False, usencom = False, batch = 1,isxl = False, lstop=0, lstop_hr=0, diff = None):
@@ -254,14 +257,9 @@ class Script(modules.scripts.Script):
     paste_field_names = []
 
     def ui(self, is_img2img):
-        filepath = os.path.join(PTPRESET, FLJSON)
-
         presets = []
 
         eladd = "i2i" if is_img2img else "t2i"
-
-        presets = loadpresets(filepath)
-        presets = LPRESET.update(presets)
 
         with gr.Accordion("Regional Prompter", open=False, elem_id="RP_main" + eladd):
             with gr.Row():
@@ -294,10 +292,11 @@ class Script(modules.scripts.Script):
             (mmode, ratios, maketemp, template, areasimg, flipper, thei, twid, overlay) = ltabp[0]
             (xmode, polymask, num, canvas_width, canvas_height, btn, cbtn, showmask, uploadmask) = ltabp[1]
             (pmode, threshold) = ltabp[2]
-            
+
             with gr.Accordion("Presets",open = False):
                 with gr.Row():
-                    availablepresets = gr.Dropdown(label="Presets", choices=presets, type="index")
+                    availablepresets = gr.Dropdown(label="Presets", choices=presets, type="value")
+                    load_presets = gr.Button(value="Load Presets",variant='secondary',elem_id="RP_loadsetting" + eladd)
                     applypresets = gr.Button(value="Apply Presets",variant='primary',elem_id="RP_applysetting" + eladd)
                 with gr.Row():
                     presetname = gr.Textbox(label="Preset Name",lines=1,value="",interactive=True,elem_id="RP_preset_name" + eladd,visible=True)
@@ -308,7 +307,7 @@ class Script(modules.scripts.Script):
                 lnter = gr.Textbox(label="LoRA in negative textencoder",value="0",interactive=True,elem_id="RP_ne_tenc_ratio_negative" + eladd,visible=True)
                 lnur = gr.Textbox(label="LoRA in negative U-net",value="0",interactive=True,elem_id="RP_ne_unet_ratio_negative" + eladd,visible=True)
             with gr.Row():
-                options = gr.CheckboxGroup(value=False, label="Options",choices=[OPTAND, OPTUSEL,OPTBREAK, "debug", "debug2"], interactive=True, elem_id="RP_options" + eladd)
+                options = gr.CheckboxGroup(value=False, label="Options",choices=[OPTAND, OPTUSEL,OPTBREAK], interactive=True, elem_id="RP_options" + eladd)
             mode = gr.Textbox(value = "Matrix",visible = False, elem_id="RP_divide_mode" + eladd)
 
             dummy_img = gr.Image(type="pil", show_label  = False, height=256, width=256,source = "upload", interactive=True, visible = False)
@@ -351,9 +350,9 @@ class Script(modules.scripts.Script):
         for _,name in self.infotext_fields:
             self.paste_field_names.append(name)
 
-        def setpreset(select, *settings):
+        def setpreset(request: gr.Request, select, *settings):
             """Load preset from list.
-            
+
             SBM: The only way I know how to get the old values in gradio,
             is to pass them all as input.
             Tab mode converts ui to single value.
@@ -362,8 +361,15 @@ class Script(modules.scripts.Script):
             # getting "valueerror: cannot process this value as image".
             # Gradio bug in components.postprocess, most likely.
             settings = [s["image"] if (isinstance(s,dict) and "image" in s) else s for s in settings]
+            filepath = get_individual_preset_path(request, PTPRESET, FLJSON)
             presets = loadpresets(filepath)
-            preset = presets[select]
+            preset = None
+            for item in presets:
+                if select == item["name"]:
+                    preset = item
+                    break
+            if preset is None:
+                return settings
             preset = loadblob(preset)
             preset = [fmt(preset.get(k, vdef)) for (k,fmt,vdef) in PRESET_KEYS]
             preset = preset[1:] # Remove name.
@@ -377,6 +383,13 @@ class Script(modules.scripts.Script):
             if preset[0] == "Horizontal":preset[0] = "Columns"
             return preset
 
+        def load_individual_presets(request: gr.Request):
+            filepath = get_individual_preset_path(request, PTPRESET, FLJSON)
+            presets = PresetList()
+            presets = presets.update(loadpresets(filepath))
+            return gr.update(choices=presets)
+
+        load_presets.click(fn=load_individual_presets, inputs=None, outputs=availablepresets)
         maketemp.click(fn=makeimgtmp, inputs =[ratios,mmode,usecom,usebase,flipper,thei,twid,dummy_img,overlay],outputs = [areasimg,template])
         applypresets.click(fn=setpreset, inputs = [availablepresets, *settings], outputs=settings)
         savesets.click(fn=savepresets, inputs = [presetname,*settings],outputs=availablepresets)
@@ -587,7 +600,7 @@ class Script(modules.scripts.Script):
                 #escape reload loras in hires-fix
 
     def postprocess(self, p, processed, *args):
-        if self.active : 
+        if self.active :
             with open(os.path.join(paths.data_path, "params.txt"), "w", encoding="utf8") as file:
                 processedx = Processed(p, [], p.seed, "")
                 file.write(processedx.infotext(p, 0))
@@ -805,57 +818,55 @@ class PresetList():
     """
     def __init__(self):
         self.lpr = []
-    
+
     def update(self, newpr):
         """Replace all values, return the reference.
-        
+
         Will convert dicts to the names only.
         Might be more efficient to add the new names only, but meh.
         """
         if len(newpr) > 0 and isinstance(newpr[0],dict):
-            newpr = [pr["name"] for pr in newpr] 
+            newpr = [pr["name"] for pr in newpr]
         self.lpr.clear()
         self.lpr.extend(newpr)
         return self.lpr
-        
+
     def get(self):
         return self.lpr
 
 class JsonMask():
     """Mask saved as image with some editing work.
-    
+
     """
     blobdir = "regional_masks"
     ext = ".png"
-    
+
     def __init__(self, img):
         self.img = img
-    
+
     def makepath(self, name):
         pt = fimgpt(name, self.ext, PTPRESET, self.blobdir)
         os.makedirs(os.path.dirname(pt), exist_ok = True)
         return pt
-    
+
     def save(self, name, preset = None):
         """Save image to subdir.
-        
+
         Only saved when in mask mode - Hardcoded, don't have a better idea atm.
         """
-        if (preset is None) or (preset[1] == "Mask"): # Check mode.  
+        if (preset is None) or (preset[1] == "Mask"): # Check mode.
             save_mask(self.img, self.makepath(name))
             return name
         return None
-    
+
     def load(self, name, preset = None):
         """Load image from subdir (no editing, that comes later).
-        
+
         Prefer to use the given key, rather than name. SBM CONT: Load / save in dict mode? Debugging needed.
         """
         if name is None or self.img is None:
             return None
         return load_mask(self.makepath(self.img))
-
-LPRESET = PresetList()
 
 fcountbrk = lambda x: x.count(KEYBRK)
 fint = lambda x: int(x)
@@ -864,10 +875,10 @@ fint = lambda x: int(x)
 fjstr = lambda x: x.strip()
 #fjbool = lambda x: (x.upper() == "TRUE" or x.upper() == "T")
 fjbool = lambda x: x # Json can store booleans reliably.
-fjmask = lambda x: draw_image(x, inddict = False)[0] # Ignore mask reset value. 
+fjmask = lambda x: draw_image(x, inddict = False)[0] # Ignore mask reset value.
 
 # (json_name, value_format, default)
-# If default = none then will use current gradio value. 
+# If default = none then will use current gradio value.
 PRESET_KEYS = [
 ("name",fjstr,"") , # Name is special, preset's key.
 ("mode", fjstr, None) ,
@@ -891,11 +902,11 @@ BLOB_KEYS = {
 
 def saveblob(preset):
     """Preset variables saved externally (blob).
-    
+
     Returns modified list containing the refernces instead of data.
     Currently, this includes polymask, which is saved as an image,
     with a filename = preset.
-    A blob class should contain a save method which returns the reference. 
+    A blob class should contain a save method which returns the reference.
     """
     preset = list(preset) # Tuples don't have copy.
     for (i,(vkey,vfun,vdef)) in enumerate(PRESET_KEYS):
@@ -910,11 +921,11 @@ def saveblob(preset):
 
 def loadblob(preset):
     """Load blob presets based on key.
-    
-    Returns modified list containing the refernces instead of 
+
+    Returns modified list containing the refernces instead of
     Currently, this includes polymask, which is saved as an image,
     with a filename = preset.
-    A blob class should contain a load method which retrieves the data based on reference. 
+    A blob class should contain a load method which retrieves the data based on reference.
     """
     for (vkey,vval) in BLOB_KEYS.items():
         # Func should accept refrence form and convert it to a class.
@@ -925,16 +936,24 @@ def loadblob(preset):
         preset[vkey] = x
     return preset
 
-def savepresets(*settings):
+
+def get_individual_preset_path(request: gr.Request, script_path, filename):
+    path = paths.Paths(request)
+    output_dir = os.path.join(path.private_outdir(), os.path.basename(os.path.normpath(script_path)))
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+    return os.path.join(output_dir, filename)
+
+def savepresets(*settings, request: gr.Request = None):
     # NAME must come first.
     name = settings[0]
     settings = [name] + compress_components(settings[1:])
     settings = saveblob(settings)
-    
+
     # path_root = modules.scripts.basedir()
     # filepath = os.path.join(path_root, "scripts", "regional_prompter_presets.json")
-    filepath = os.path.join(PTPRESET, FLJSON)
-
+    # filepath = os.path.join(PTPRESET, FLJSON)
+    filepath = get_individual_preset_path(request, PTPRESET, FLJSON)
     try:
         with open(filepath, mode='r', encoding="utf-8") as f:
             # presets = json.loads(json.load(f))
@@ -956,24 +975,25 @@ def savepresets(*settings):
     except Exception as e:
         print(e)
 
-    presets = loadpresets(filepath)
-    presets = LPRESET.update(presets)
+    presets = PresetList()
+    presets = presets.update(loadpresets(filepath))
     return gr.update(choices=presets)
 
 def presetfallback():
     """Swaps main json dir to alt if exists, attempts reload.
-    
+
     """
     global PTPRESET
     global PTPRESETALT
-    
-    if PTPRESETALT is not None:
-        print("Unknown preset error, fallback.")
-        PTPRESET = PTPRESETALT
-        PTPRESETALT = None
-        return loadpresets(PTPRESET)
+
+    if os.path.exists(os.path.join(PTPRESET, FLJSON)):
+        print("Unknown preset error, fallback to PTPRESET.")
+        return loadpresets(os.path.join(PTPRESET, FLJSON))
+    elif os.path.exists(os.path.join(PTPRESETALT, FLJSON)):
+        print("Unknown preset error, fallback to PTPRESETALT.")
+        return loadpresets(os.path.join(PTPRESETALT, FLJSON))
     else: # Already attempted swap.
-        print("Presets could not be loaded.") 
+        print("Presets could not be loaded.")
         return None
 
 def loadpresets(filepath):
@@ -1028,7 +1048,7 @@ fseti = lambda x: shared.opts.data.get(EXTKEY + "_" + x, DEXTSETV[x])
 
 class Setting_Component():
     """Creates gradio components with some standard req values.
-    
+
     All must supply an id (used in code), label, component type. 
     Default value and specific type settings can be overridden. 
     """
@@ -1041,32 +1061,32 @@ class Setting_Component():
         method(**kwargs)
         if vdef is not None:
             self.vdef = vdef
-        
+
     def get(self):
         """Get formatted setting.
-        
+
         Input for shared.opts.add_option().
         """
         if self.ctyp == "textb":
             return (self.cid, shared.OptionInfo(self.vdef, self.clabel, section = self.section))
         return (self.cid, shared.OptionInfo(self.vdef, self.clabel,
                                             self.ccomp, self.cparms, section = self.section))
-    
+
     def textb(self, **kwargs):
         """Textbox unusually requires no component.
-        
+
         """
         self.ccomp = gr.Textbox
         self.vdef = ""
         self.cparms = {}
         self.cparms.update(kwargs)
-    
+
     def check(self, **kwargs):
         self.ccomp = gr.Checkbox
         self.vdef = False
         self.cparms = {"interactive": True}
         self.cparms.update(kwargs)
-        
+
     def slider(self, **kwargs):
         self.ccomp = gr.Slider
         self.vdef = 0
